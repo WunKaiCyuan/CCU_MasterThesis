@@ -1,0 +1,16 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CCU_Regulations_Downloader", "CCU_Regulations_Downloader\CCU_Regulations_Downloader.csproj", "{AC89EBC3-D0A9-474F-BC3D-E7389B1EB008}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{AC89EBC3-D0A9-474F-BC3D-E7389B1EB008}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AC89EBC3-D0A9-474F-BC3D-E7389B1EB008}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AC89EBC3-D0A9-474F-BC3D-E7389B1EB008}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AC89EBC3-D0A9-474F-BC3D-E7389B1EB008}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
