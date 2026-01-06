@@ -1,0 +1,25 @@
+# --- 核心框架 ---
+langchain>=0.3.0
+langchain-community
+langchain-ollama
+langchain-huggingface
+langchain-experimental
+langchain-chroma
+langchain-text-splitters    # 新增：用於快速且穩定的 RecursiveCharacterTextSplitter
+
+# --- 向量資料庫 ---
+chromadb
+
+# --- 數據處理 (針對 PDF 與 Docx) ---
+pypdf               # 處理 PDF 的標準庫
+python-docx         # 處理 Docx 的標準庫
+
+# --- NLP 與環境 ---
+sentence-transformers
+python-dotenv
+tiktoken
+numpy<2.0.0         # 維持穩定性
+
+# --- 監控與評估 ---
+arize-phoenix
+openinference-instrumentation-langchain
