@@ -5,3 +5,9 @@ riderModule.iml
 /_ReSharper.Caches/
 DownloadedResources
 npl_research/chroma_data
+npl_research/llm_models
+*.log
+npl_research/mongo_data
+npl_research/app/__pycache__
+npl_research/ingestion/__pycache__
+npl_research/__pycache__

@@ -1,0 +1,1 @@
+ollama create KCWen/taide -f ./npl_research/llm_models/Modelfile

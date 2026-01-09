@@ -1,8 +1,18 @@
 version: '3.9'
 
 services:
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    restart: unless-stopped
+    ports:
+      - "6006:6006"   # Web UI 介面
+      - "4317:4317"   # gRPC OTLP 數據接收埠 (更穩定)
+      - "4318:4318"   # HTTP OTLP 數據接收埠
+    environment:
+      - PHOENIX_HOST=0.0.0.0
   chromadb:
     image: chromadb/chroma:latest
+    restart: unless-stopped
     volumes:
       - ./chroma_data:/data  # 將資料存儲在本地目錄
     environment:
@@ -10,3 +20,13 @@ services:
       - PERSIST_DIRECTORY=/data
     ports:
       - "8000:8000"
+  mongodb:
+    image: mongo:latest  # 或指定版本如 mongo:8.0
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=UTWi1dCo6jFxNlS0
+    volumes:
+      - ./mongo_data:/data/db

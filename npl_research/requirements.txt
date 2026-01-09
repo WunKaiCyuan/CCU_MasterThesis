@@ -1,5 +1,6 @@
 # --- 核心框架 ---
 langchain>=0.3.0
+langchain-core
 langchain-community
 langchain-ollama
 langchain-huggingface
@@ -23,3 +24,20 @@ numpy<2.0.0         # 維持穩定性
 # --- 監控與評估 ---
 arize-phoenix
 openinference-instrumentation-langchain
+
+# --- API 框架 ---
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+jinja2>=3.1.0
+python-multipart>=0.0.6
+
+# --- 模型訓練 (LoRA 微調) ---
+# 注意：訓練腳本建議在 GPU 環境執行
+unsloth                    # 高效 LoRA 微調框架
+trl                        # Transformer Reinforcement Learning (包含 SFTTrainer)
+transformers>=4.40.0       # HuggingFace Transformers
+datasets>=2.14.0           # HuggingFace Datasets
+accelerate                 # HuggingFace Accelerate (用於分散式訓練)
+# torch 和相關套件通常會由 unsloth 自動安裝，但如需明確指定：
+# torch>=2.0.0             # PyTorch (根據 CUDA 版本選擇)
+# bitsandbytes             # 4-bit 量化支援 (unsloth 通常會自動處理)

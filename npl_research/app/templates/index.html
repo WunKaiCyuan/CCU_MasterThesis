@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CCU 校規問答系統</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 900px;
+            width: 100%;
+            padding: 40px;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1em;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            font-family: inherit;
+            resize: vertical;
+            transition: border-color 0.3s;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .char-count {
+            text-align: right;
+            color: #999;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        .char-count.warning {
+            color: #ff9800;
+        }
+
+        .char-count.error {
+            color: #f44336;
+        }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+            display: none;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .result.active {
+            display: block;
+        }
+
+        .result h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .result-content {
+            color: #555;
+            line-height: 1.8;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .result-meta {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+            font-size: 0.9em;
+            color: #999;
+        }
+
+        .error {
+            background: #fff5f5;
+            border-left-color: #f44336;
+            color: #c53030;
+        }
+
+        .error h3 {
+            color: #c53030;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+            color: #999;
+            font-size: 0.9em;
+        }
+
+        .footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎓 CCU 校規問答系統</h1>
+        <p class="subtitle">基於微調 TAIDE 模型的智能問答助手</p>
+
+        <form id="queryForm">
+            <div class="form-group">
+                <label for="question">請輸入您的問題：</label>
+                <textarea 
+                    id="question" 
+                    name="question" 
+                    rows="4" 
+                    placeholder="例如：請說明中正大學的退選規定..."
+                    maxlength="500"
+                    required
+                ></textarea>
+                <div class="char-count" id="charCount">0 / 500 字元</div>
+            </div>
+            <button type="submit" id="submitBtn">送出查詢</button>
+        </form>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p style="margin-top: 10px; color: #666;">正在處理您的問題，請稍候...</p>
+        </div>
+
+        <div class="result" id="result">
+            <h3 id="resultTitle">回答：</h3>
+            <div class="result-content" id="resultContent"></div>
+            <div class="result-meta" id="resultMeta"></div>
+        </div>
+
+        <div class="footer">
+            <p>💡 提示：您可以到 <a href="http://localhost:6006" target="_blank">Phoenix 介面</a> 查看檢索到的原文片段和詳細追蹤資訊</p>
+            <p style="margin-top: 5px;">API 文檔：<a href="/docs" target="_blank">/docs</a></p>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('queryForm');
+        const questionInput = document.getElementById('question');
+        const charCount = document.getElementById('charCount');
+        const submitBtn = document.getElementById('submitBtn');
+        const loading = document.getElementById('loading');
+        const result = document.getElementById('result');
+        const resultTitle = document.getElementById('resultTitle');
+        const resultContent = document.getElementById('resultContent');
+        const resultMeta = document.getElementById('resultMeta');
+
+        // 字元計數
+        questionInput.addEventListener('input', function() {
+            const length = this.value.length;
+            charCount.textContent = `${length} / 500 字元`;
+            
+            charCount.classList.remove('warning', 'error');
+            if (length > 450) {
+                charCount.classList.add('error');
+            } else if (length > 400) {
+                charCount.classList.add('warning');
+            }
+        });
+
+        // 表單提交
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const question = questionInput.value.trim();
+            if (!question) {
+                alert('請輸入問題');
+                return;
+            }
+
+            // 隱藏結果，顯示載入中
+            result.classList.remove('active');
+            result.classList.remove('error');
+            loading.classList.add('active');
+            submitBtn.disabled = true;
+
+            try {
+                const response = await fetch('/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ question: question })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || '查詢失敗');
+                }
+
+                // 顯示結果
+                resultTitle.textContent = '回答：';
+                resultContent.textContent = data.answer;
+                resultMeta.textContent = `處理時間：${data.processing_time} 秒 | 查詢時間：${new Date(data.timestamp).toLocaleString('zh-TW')}`;
+                result.classList.remove('error');
+                result.classList.add('active');
+
+            } catch (error) {
+                // 顯示錯誤
+                resultTitle.textContent = '錯誤：';
+                resultContent.textContent = error.message || '發生未知錯誤，請稍後再試';
+                resultMeta.textContent = '';
+                result.classList.add('error');
+                result.classList.add('active');
+            } finally {
+                loading.classList.remove('active');
+                submitBtn.disabled = false;
+            }
+        });
+
+        // 載入時聚焦輸入框
+        questionInput.focus();
+    </script>
+</body>
+</html>
