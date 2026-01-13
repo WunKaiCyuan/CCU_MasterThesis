@@ -1,5 +1,5 @@
 # --- 核心框架 ---
-langchain>=0.3.0
+langchain==0.3.0
 langchain-core
 langchain-community
 langchain-ollama
@@ -10,6 +10,9 @@ langchain-text-splitters    # 新增：用於快速且穩定的 RecursiveCharact
 
 # --- 向量資料庫 ---
 chromadb
+
+# --- 文檔存儲 ---
+pymongo                 # MongoDB 客戶端（用於 ParentDocumentRetriever）
 
 # --- 數據處理 (針對 PDF 與 Docx) ---
 pypdf               # 處理 PDF 的標準庫

@@ -12,7 +12,7 @@ sys.path.insert(0, project_root)
 
 if __name__ == "__main__":
     import uvicorn
-    from app.config import Config
+    from core.config import Config
     
     # 驗證設定
     try:

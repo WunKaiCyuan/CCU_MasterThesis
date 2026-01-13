@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel, Field, field_validator
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -21,18 +22,9 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 from phoenix.otel import register
-# 導入配置模組
-# 優先嘗試相對導入（作為模組時），失敗則嘗試絕對導入（直接運行時）
-try:
-    from .config import Config
-except ImportError:
-    # 直接運行時，確保當前目錄在路徑中
-    import sys
-    import os
-    app_dir = os.path.dirname(os.path.abspath(__file__))
-    if app_dir not in sys.path:
-        sys.path.insert(0, app_dir)
-    from config import Config
+import chromadb
+from langchain.retrievers import ParentDocumentRetriever
+from core.config import Config
 
 # 驗證設定
 try:
@@ -158,22 +150,90 @@ def initialize_components():
             encode_kwargs={'normalize_embeddings': True}
         )
         
-        vectorstore = Chroma(
-            embedding_function=embeddings,
+        # 在 langchain 0.3.0 中，需要使用 chromadb.HttpClient
+        client = chromadb.HttpClient(
             host=Config.CHROMA_HOST,
-            port=Config.CHROMA_PORT,
-            collection_name=Config.CHROMA_COLLECTION_NAME
+            port=Config.CHROMA_PORT
+        )
+        vectorstore = Chroma(
+            client=client,
+            collection_name=Config.CHROMA_COLLECTION_NAME,
+            embedding_function=embeddings
         )
         collection_count = vectorstore._collection.count()
         logger.info(f"向量資料庫連接成功，共 {collection_count} 個文檔")
     except Exception as e:
         logger.error(f"載入向量資料庫失敗: {e}", exc_info=True)
         raise
+
+    try:
+        # 導入配置模組
+        # 優先嘗試相對導入（作為模組時），失敗則嘗試絕對導入（直接運行時）
+        try:
+            from ..core.serializable_mongodb_byte_store import SerializableMongoDBByteStore
+        except ImportError:
+            # 直接運行時，確保當前目錄在路徑中
+            app_dir = os.path.dirname(os.path.abspath(__file__))
+            if app_dir not in sys.path:
+                sys.path.insert(0, app_dir)
+            from nlp_research.core.serializable_mongodb_byte_store import SerializableMongoDBByteStore
+
+        store = SerializableMongoDBByteStore(
+            connection_string=Config.MONGODB_CONNECTION_STRING,
+            db_name=Config.MONGODB_DB_NAME,
+            collection_name=Config.MONGODB_COLLECTION_NAME
+        )
+        print("✅ MongoDB 連接成功")
+    except Exception as e:
+        print(f"❌ 連接 MongoDB 失敗: {e}")
+        print("   請確認 MongoDB 服務是否正在運行")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
     
     # 3. 設定檢索器
-    retriever = vectorstore.as_retriever(
-        search_type="mmr",
-        search_kwargs={"k": Config.RETRIEVER_K, "fetch_k": Config.RETRIEVER_FETCH_K}
+    # retriever = vectorstore.as_retriever(
+    #     search_type="mmr",
+    #     search_kwargs={"k": Config.RETRIEVER_K, "fetch_k": Config.RETRIEVER_FETCH_K}
+    # )
+    
+    # 建立切分器（必須與建置時相同）
+    parent_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=Config.PARENT_CHUNK_SIZE,
+        chunk_overlap=Config.PARENT_CHUNK_OVERLAP,
+        separators=[
+            "\n第[一二三四五六七八九十百]+條",
+            "第[一二三四五六七八九十百]+條",
+            "\n\n",
+            "\n",
+            "。",
+            " ",
+            ""
+        ],
+        is_separator_regex=True
+    )
+    
+    child_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=Config.CHILD_CHUNK_SIZE,
+        chunk_overlap=Config.CHILD_CHUNK_OVERLAP,
+        separators=[
+            "\n第[一二三四五六七八九十百]+條",
+            "第[一二三四五六七八九十百]+條",
+            "\n\n",
+            "\n",
+            "。",
+            " ",
+            ""
+        ],
+        is_separator_regex=True
+    )
+
+    parent_document_retriever = ParentDocumentRetriever(
+        vectorstore=vectorstore,
+        docstore=store,
+        child_splitter=child_splitter,
+        parent_splitter=parent_splitter,
+        search_kwargs={"k": 5}  # 檢索前 5 個 child 片段，然後返回對應的 parent
     )
     
     # 4. 初始化 LLM 模型
@@ -189,7 +249,7 @@ def initialize_components():
         raise
     
     # 5. 設計 RAG 流程
-    template = """你是一位專業的國立中正大學校規與法規諮詢助手。你的任務是根據提供的文獻內容，以專業、準確、友善的方式回答使用者關於校規的問題。
+    template = """你是一位專業的國立中正大學校規諮詢助手。你的任務是根據提供的文獻內容，以專業、準確、友善的方式回答使用者關於校規的問題。
 
 ## 角色定位
 - 你是一位熟悉中正大學所有校規、法規、行政規章的專業助手
@@ -232,7 +292,8 @@ def initialize_components():
     
     rag_chain = (
         {
-            "context": retriever | format_docs,
+            # "context": retriever | format_docs,
+            "context": parent_document_retriever | format_docs,
             "question": RunnablePassthrough()
         }
         | prompt

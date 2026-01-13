@@ -4,6 +4,7 @@
 """
 import configparser
 from pathlib import Path
+import os
 
 # 設定檔案路徑
 # 先嘗試在同目錄下尋找，如果找不到則嘗試專案根目錄
@@ -73,6 +74,23 @@ class Config:
     API_HOST = _get("API", "HOST", str)
     API_PORT = _get("API", "PORT", int)
     
+    # MongoDB 設定
+    MONGODB_CONNECTION_STRING = _get("MongoDB", "CONNECTION_STRING", str)
+    MONGODB_DB_NAME = _get("MongoDB", "DB_NAME", str)
+    MONGODB_COLLECTION_NAME = _get("MongoDB", "COLLECTION_NAME", str)
+    
+    # Parent-Child 設定
+    PARENT_CHUNK_SIZE = _get("ParentChild", "PARENT_CHUNK_SIZE", int)
+    PARENT_CHUNK_OVERLAP = _get("ParentChild", "PARENT_CHUNK_OVERLAP", int)
+    CHILD_CHUNK_SIZE = _get("ParentChild", "CHILD_CHUNK_SIZE", int)
+    CHILD_CHUNK_OVERLAP = _get("ParentChild", "CHILD_CHUNK_OVERLAP", int)
+    
+    # Ingestion 設定
+    DATA_DIR = _get("Ingestion", "DATA_DIR", str)
+    CHUNK_SIZE = _get("Ingestion", "CHUNK_SIZE", int)
+    CHUNK_OVERLAP = _get("Ingestion", "CHUNK_OVERLAP", int)
+    INCLUDE_SOURCE = _get("Ingestion", "INCLUDE_SOURCE", lambda x: x.lower() == "true")
+    
     @classmethod
     def validate(cls):
         """驗證設定值的有效性"""
@@ -90,5 +108,27 @@ class Config:
         
         if cls.API_PORT <= 0 or cls.API_PORT > 65535:
             raise ValueError(f"API_PORT 必須在 1-65535 之間，目前為 {cls.API_PORT}")
+        
+        if cls.CHUNK_SIZE <= 0:
+            raise ValueError(f"CHUNK_SIZE 必須大於 0，目前為 {cls.CHUNK_SIZE}")
+        
+        if cls.CHUNK_OVERLAP < 0:
+            raise ValueError(f"CHUNK_OVERLAP 必須大於等於 0，目前為 {cls.CHUNK_OVERLAP}")
+        
+        if cls.CHUNK_OVERLAP >= cls.CHUNK_SIZE:
+            raise ValueError(f"CHUNK_OVERLAP ({cls.CHUNK_OVERLAP}) 必須小於 CHUNK_SIZE ({cls.CHUNK_SIZE})")
+        
+        if not os.path.exists(cls.DATA_DIR):
+            raise FileNotFoundError(f"資料目錄不存在: {cls.DATA_DIR}")
+        
+        # Parent-Child 設定驗證
+        if cls.PARENT_CHUNK_SIZE <= 0:
+            raise ValueError(f"PARENT_CHUNK_SIZE 必須大於 0，目前為 {cls.PARENT_CHUNK_SIZE}")
+        
+        if cls.CHILD_CHUNK_SIZE <= 0:
+            raise ValueError(f"CHILD_CHUNK_SIZE 必須大於 0，目前為 {cls.CHILD_CHUNK_SIZE}")
+        
+        if cls.PARENT_CHUNK_SIZE <= cls.CHILD_CHUNK_SIZE:
+            raise ValueError(f"PARENT_CHUNK_SIZE ({cls.PARENT_CHUNK_SIZE}) 必須大於 CHILD_CHUNK_SIZE ({cls.CHILD_CHUNK_SIZE})")
         
         return True

@@ -22,22 +22,8 @@ from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.storage import MongoDBByteStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-
-# 嘗試不同的導入路徑
-try:
-    from langchain.retrievers import ParentDocumentRetriever
-except ImportError:
-    try:
-        from langchain_community.retrievers import ParentDocumentRetriever
-    except ImportError:
-        try:
-            from langchain.retrievers.parent_document_retriever import ParentDocumentRetriever
-        except ImportError:
-            raise ImportError(
-                "無法找到 ParentDocumentRetriever。\n"
-                "請確認 LangChain 版本是否 >= 0.3.0，或嘗試安裝：\n"
-                "pip install langchain>=0.3.0"
-            )
+from langchain.retrievers import ParentDocumentRetriever
+import chromadb
 
 
 def initialize_parent_child_retriever():
@@ -65,11 +51,15 @@ def initialize_parent_child_retriever():
     # 連接向量資料庫
     print(f"正在連接到 Chroma 向量資料庫 ({Config.CHROMA_HOST}:{Config.CHROMA_PORT})...")
     try:
-        vectorstore = Chroma(
-            embedding_function=embeddings,
+        # 使用 HttpClient 連接方式（與 ingest_parent_docs.py 一致）
+        client = chromadb.HttpClient(
             host=Config.CHROMA_HOST,
-            port=Config.CHROMA_PORT,
-            collection_name=Config.CHROMA_COLLECTION_NAME
+            port=Config.CHROMA_PORT
+        )
+        vectorstore = Chroma(
+            client=client,
+            collection_name=Config.CHROMA_COLLECTION_NAME,
+            embedding_function=embeddings
         )
         child_count = vectorstore._collection.count()
         print(f"✅ Chroma 連接成功，包含 {child_count} 個 Child 文檔片段")
@@ -80,12 +70,16 @@ def initialize_parent_child_retriever():
             sys.exit(1)
     except Exception as e:
         print(f"❌ 連接 Chroma 資料庫失敗: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
     
-    # 連接 MongoDB
+    # 連接 MongoDB（使用與 ingest_parent_docs.py 相同的 SerializableMongoDBByteStore）
     print(f"正在連接到 MongoDB ({Config.MONGODB_DB_NAME})...")
     try:
-        store = MongoDBByteStore(
+        # 導入自定義的 SerializableMongoDBByteStore
+        from ingest_parent_docs import SerializableMongoDBByteStore
+        store = SerializableMongoDBByteStore(
             connection_string=Config.MONGODB_CONNECTION_STRING,
             db_name=Config.MONGODB_DB_NAME,
             collection_name=Config.MONGODB_COLLECTION_NAME
@@ -94,6 +88,8 @@ def initialize_parent_child_retriever():
     except Exception as e:
         print(f"❌ 連接 MongoDB 失敗: {e}")
         print("   請確認 MongoDB 服務是否正在運行")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
     
     # 建立切分器（必須與建置時相同）
@@ -168,6 +164,9 @@ def test_parent_child_retrieval(queries: List[str], top_k: int = 5):
             try:
                 # ParentDocumentRetriever 使用 invoke 方法
                 docs = retriever.invoke(query)
+            except Exception as e:
+                print(f"❌ 檢索失敗: {e}")
+                continue
             
             if not docs:
                 print("⚠️  未找到相關文檔")
