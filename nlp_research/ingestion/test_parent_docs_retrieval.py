@@ -2,28 +2,16 @@
 Parent-Child 檢索測試腳本
 驗證 Parent-Child 檢索方式的效果
 """
-import os
 import sys
 from pathlib import Path
 from typing import List
-
-# 導入配置
-try:
-    from .config import Config
-except ImportError:
-    import sys
-    import os
-    ingestion_dir = os.path.dirname(os.path.abspath(__file__))
-    if ingestion_dir not in sys.path:
-        sys.path.insert(0, ingestion_dir)
-    from config import Config
-
+from core.config import Config
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.storage import MongoDBByteStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.retrievers import ParentDocumentRetriever
 import chromadb
+from core.serializable_mongodb_byte_store import SerializableMongoDBByteStore
 
 
 def initialize_parent_child_retriever():
@@ -78,7 +66,6 @@ def initialize_parent_child_retriever():
     print(f"正在連接到 MongoDB ({Config.MONGODB_DB_NAME})...")
     try:
         # 導入自定義的 SerializableMongoDBByteStore
-        from ingest_parent_docs import SerializableMongoDBByteStore
         store = SerializableMongoDBByteStore(
             connection_string=Config.MONGODB_CONNECTION_STRING,
             db_name=Config.MONGODB_DB_NAME,
@@ -93,27 +80,12 @@ def initialize_parent_child_retriever():
         sys.exit(1)
     
     # 建立切分器（必須與建置時相同）
-    parent_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=Config.PARENT_CHUNK_SIZE,
-        chunk_overlap=Config.PARENT_CHUNK_OVERLAP,
-        separators=[
-            "\n第[一二三四五六七八九十百]+條",
-            "第[一二三四五六七八九十百]+條",
-            "\n\n",
-            "\n",
-            "。",
-            " ",
-            ""
-        ],
-        is_separator_regex=True
-    )
-    
     child_splitter = RecursiveCharacterTextSplitter(
         chunk_size=Config.CHILD_CHUNK_SIZE,
         chunk_overlap=Config.CHILD_CHUNK_OVERLAP,
         separators=[
-            "\n第[一二三四五六七八九十百]+條",
-            "第[一二三四五六七八九十百]+條",
+            "\n?第[一二三四五六七八九十百]+條",
+            "\n?[一二三四五六七八九十百]+、",
             "\n\n",
             "\n",
             "。",
@@ -129,7 +101,6 @@ def initialize_parent_child_retriever():
         vectorstore=vectorstore,
         docstore=store,
         child_splitter=child_splitter,
-        parent_splitter=parent_splitter,
         search_kwargs={"k": 5}  # 檢索前 5 個 child 片段，然後返回對應的 parent
     )
     print("✅ ParentDocumentRetriever 建立成功\n")

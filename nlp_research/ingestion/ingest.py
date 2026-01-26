@@ -13,7 +13,7 @@ from langchain_core.documents import Document
 from langchain_chroma import Chroma
 import chromadb
 from core.config import Config
-from ingestion.document_loader import load_documents
+from core.document_loader import load_documents
 
 # 設定日誌
 log_file = Path(__file__).parent / "ingest.log"
@@ -150,7 +150,7 @@ def main():
         
         # 1. 載入文件
         documents = load_documents(Config.DATA_DIR, clean=False, logger_instance=logger)
-        
+
         # 2. 切分文件
         chunks = split_documents(
             documents,

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -36,6 +37,7 @@
                 opacity: 0;
                 transform: translateY(20px);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -146,8 +148,13 @@
         }
 
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
 
         .result {
@@ -165,6 +172,7 @@
                 opacity: 0;
                 transform: translateY(-10px);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -223,8 +231,75 @@
         .footer a:hover {
             text-decoration: underline;
         }
+
+        .sources-container {
+            margin-top: 25px;
+            padding-top: 20px;
+            border-top: 1px dashed #e0e0e0;
+        }
+
+        .sources-header {
+            color: #666;
+            margin-bottom: 15px;
+            font-size: 1.1em;
+        }
+
+        .source-item {
+            background: #fff;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            transition: box-shadow 0.2s;
+        }
+
+        .source-item:hover {
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+        }
+
+        .source-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #f5f5f5;
+        }
+
+        .source-title {
+            font-weight: 600;
+            color: #444;
+            font-size: 0.95em;
+        }
+
+        .download-link {
+            color: #667eea;
+            text-decoration: none;
+            font-size: 0.9em;
+            padding: 4px 10px;
+            border: 1px solid #667eea;
+            border-radius: 20px;
+            transition: all 0.2s;
+        }
+
+        .download-link:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .source-snippet {
+            font-size: 0.9em;
+            color: #666;
+            line-height: 1.6;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>🎓 CCU 校規問答系統</h1>
@@ -233,14 +308,8 @@
         <form id="queryForm">
             <div class="form-group">
                 <label for="question">請輸入您的問題：</label>
-                <textarea 
-                    id="question" 
-                    name="question" 
-                    rows="4" 
-                    placeholder="例如：請說明中正大學的退選規定..."
-                    maxlength="500"
-                    required
-                ></textarea>
+                <textarea id="question" name="question" rows="4" placeholder="例如：請說明中正大學的退選規定..." maxlength="500"
+                    required></textarea>
                 <div class="char-count" id="charCount">0 / 500 字元</div>
             </div>
             <button type="submit" id="submitBtn">送出查詢</button>
@@ -251,9 +320,19 @@
             <p style="margin-top: 10px; color: #666;">正在處理您的問題，請稍候...</p>
         </div>
 
+        <div class="error-message" id="errorMsg"
+            style="display: none; color: red; background: #ffebee; padding: 10px; border-radius: 5px; margin-top: 20px;">
+        </div>
+
         <div class="result" id="result">
             <h3 id="resultTitle">回答：</h3>
             <div class="result-content" id="resultContent"></div>
+
+            <div id="sourcesContainer" class="sources-container" style="display: none;">
+                <h4 class="sources-header">參考文獻：</h4>
+                <div id="sourcesList"></div>
+            </div>
+
             <div class="result-meta" id="resultMeta"></div>
         </div>
 
@@ -269,16 +348,26 @@
         const charCount = document.getElementById('charCount');
         const submitBtn = document.getElementById('submitBtn');
         const loading = document.getElementById('loading');
-        const result = document.getElementById('result');
+
+        // Mapped variables for new logic
+        const answerContainer = document.getElementById('result');
+        const answerText = document.getElementById('resultContent');
+        const sourcesContainer = document.getElementById('sourcesContainer');
+        const sourcesList = document.getElementById('sourcesList');
+        const statusInfo = document.getElementById('resultMeta');
+        const errorMsg = document.getElementById('errorMsg');
+
+        // Legacy variables mapping (if needed for old code)
+        const result = answerContainer;
         const resultTitle = document.getElementById('resultTitle');
-        const resultContent = document.getElementById('resultContent');
-        const resultMeta = document.getElementById('resultMeta');
+        const resultContent = answerText;
+        const resultMeta = statusInfo;
 
         // 字元計數
-        questionInput.addEventListener('input', function() {
+        questionInput.addEventListener('input', function () {
             const length = this.value.length;
             charCount.textContent = `${length} / 500 字元`;
-            
+
             charCount.classList.remove('warning', 'error');
             if (length > 450) {
                 charCount.classList.add('error');
@@ -288,9 +377,9 @@
         });
 
         // 表單提交
-        form.addEventListener('submit', async function(e) {
+        form.addEventListener('submit', async function (e) {
             e.preventDefault();
-            
+
             const question = questionInput.value.trim();
             if (!question) {
                 alert('請輸入問題');
@@ -298,18 +387,23 @@
             }
 
             // 隱藏結果，顯示載入中
-            result.classList.remove('active');
-            result.classList.remove('error');
+            // 隱藏結果，顯示載入中
+            answerContainer.classList.remove('active');
+            errorMsg.style.display = 'none';
             loading.classList.add('active');
             submitBtn.disabled = true;
 
             try {
+                // 發送查詢請求 (啟用 skip_llm)
                 const response = await fetch('/query', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ question: question })
+                    body: JSON.stringify({
+                        question: question,
+                        skip_llm: true  // 預設啟用純檢索模式
+                    }),
                 });
 
                 const data = await response.json();
@@ -319,19 +413,93 @@
                 }
 
                 // 顯示結果
-                resultTitle.textContent = '回答：';
-                resultContent.textContent = data.answer;
-                resultMeta.textContent = `處理時間：${data.processing_time} 秒 | 查詢時間：${new Date(data.timestamp).toLocaleString('zh-TW')}`;
-                result.classList.remove('error');
-                result.classList.add('active');
+                answerContainer.classList.remove('hidden');
+                answerContainer.classList.add('active');
+
+                // 顯示答覆
+                answerText.innerHTML = `<div class="p-4 bg-blue-50 text-blue-700 rounded-md">
+                    <p class="font-bold">🔍 檢索完成！</p>
+                    <p>已找到以下相關文件。您可以點擊下方的「🤖 AI 分析」按鈕，讓 AI 為您解釋該文件如何回答您的問題。</p>
+                </div>`;
+
+                // 顯示來源
+                if (data.sources && data.sources.length > 0) {
+                    let tableHtml = `
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full bg-white border border-gray-200 rounded-lg overflow-hidden">
+                                <thead class="bg-gray-100">
+                                    <tr>
+                                        <th class="px-4 py-2 border-b text-left text-sm font-semibold text-gray-600" style="width: 60px;">#</th>
+                                        <th class="px-4 py-2 border-b text-left text-sm font-semibold text-gray-600">來源文件</th>
+                                        <th class="px-4 py-2 border-b text-center text-sm font-semibold text-gray-600" style="width: 240px; min-width: 200px;">功能</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-200">
+                    `;
+
+                    tableHtml += data.sources.map((source, index) => {
+                        const rowId = `row-${index}`;
+                        const explainId = `explain-${index}`;
+                        return `
+                        <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="px-4 py-3 text-sm text-gray-500 font-mono">${index + 1}</td>
+                            <td class="px-4 py-3 text-sm text-gray-700 font-medium">
+                                <div title="${escapeHtml(source.file_name)}">
+                                    ${escapeHtml(source.file_name)}
+                                </div>
+                            </td>
+                            <td class="px-4 py-3 text-sm">
+                                <div style="display: flex; flex-direction: row; gap: 8px; justify-content: center;">
+                                    ${source.download_url ?
+                                `<a href="${source.download_url}" target="_blank" style="flex: 1; display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; background: white; border: 1px solid #d1d5db; color: #374151; font-size: 0.875rem; font-weight: 500; border-radius: 0.375rem; text-decoration: none; transition: all 0.15s ease-in-out;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='white'">
+                                            📥 下載
+                                        </a>` : ''
+                            }
+                                    <button 
+                                            data-explain-id="${explainId}"
+                                            data-question="${escapeHtml(question)}"
+                                            data-filename="${escapeHtml(source.file_name)}"
+                                            data-content="${escapeHtml(source.content)}"
+                                            onclick="explainSourceInTable(this)" 
+                                            style="flex: 1; display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; background: white !important; background-image: none !important; border: 1px solid #d1d5db !important; color: #374151 !important; font-size: 0.875rem; font-weight: 500; border-radius: 0.375rem; cursor: pointer; transition: all 0.15s ease-in-out; box-shadow: none;" onmouseover="this.style.cssText += 'background: #f9fafb !important; background-image: none !important;'" onmouseout="this.style.cssText += 'background: white !important; background-image: none !important;'">
+                                        🤖 分析
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr id="${explainId}" class="hidden bg-indigo-50" style="display: none;">
+                            <td colspan="3" class="px-4 py-3">
+                                <div class="text-sm">
+                                    <div class="font-semibold text-indigo-700 mb-2 flex items-center">
+                                        <span>🤖 AI 分析解釋：</span>
+                                        <span class="ml-auto text-xs text-indigo-400 cursor-pointer hover:text-indigo-600" onclick="document.getElementById('${explainId}').style.display='none'">✕ 關閉</span>
+                                    </div>
+                                    <div class="explanation-content whitespace-pre-wrap text-gray-800 bg-white p-3 rounded border border-indigo-100"></div>
+                                </div>
+                            </td>
+                        </tr>
+                        `;
+                    }).join('');
+
+                    tableHtml += `
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+
+                    sourcesList.innerHTML = tableHtml;
+                    sourcesContainer.style.display = 'block';
+                } else {
+                    sourcesContainer.style.display = 'none';
+                }
+
+                // 更新狀態資訊
+                statusInfo.textContent = `處理時間: ${data.processing_time} 秒 | 查詢時間: ${new Date(data.timestamp).toLocaleString()}`;
 
             } catch (error) {
-                // 顯示錯誤
-                resultTitle.textContent = '錯誤：';
-                resultContent.textContent = error.message || '發生未知錯誤，請稍後再試';
-                resultMeta.textContent = '';
-                result.classList.add('error');
-                result.classList.add('active');
+                errorMsg.textContent = `錯誤: ${error.message}`;
+                errorMsg.style.display = 'block';
+                answerContainer.classList.add('active');
             } finally {
                 loading.classList.remove('active');
                 submitBtn.disabled = false;
@@ -340,6 +508,121 @@
 
         // 載入時聚焦輸入框
         questionInput.focus();
+
+        // 輔助函數：轉義 HTML 防止 XSS
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // AI 解釋功能 (表格版)
+        async function explainSourceInTable(btn) {
+            const explainId = btn.dataset.explainId;
+            const question = btn.dataset.question;
+            const fileName = btn.dataset.filename;
+            const content = btn.dataset.content;
+
+            const row = document.getElementById(explainId);
+            const contentDiv = row.querySelector('.explanation-content');
+
+            // 如果已經顯示且有內容，則隱藏 (Toggle)
+            if (row.style.display !== 'none' && contentDiv.textContent) {
+                row.style.display = 'none';
+                return;
+            }
+
+            // 顯示載入狀態
+            row.style.display = 'table-row';
+            contentDiv.innerHTML = '<span class="spinner" style="display: inline-block; width: 20px; height: 20px; border-width: 2px;"></span> 正在分析中...';
+            btn.disabled = true;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '⏳';
+
+            try {
+                const response = await fetch('/explain', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        question: question,
+                        file_name: fileName,
+                        content: content
+                    }),
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || '分析失敗');
+                }
+
+                // 顯示結果
+                contentDiv.textContent = data.explanation;
+                btn.innerHTML = '🤖'; // 簡化按鈕文字
+            } catch (error) {
+                contentDiv.innerHTML = `<span class="text-red-600">分析失敗: ${error.message}</span>`;
+                btn.innerHTML = originalText;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // AI 解釋功能
+        async function explainSource(btn, question, fileName, content) {
+            // 找到對應的解釋容器
+            const sourceItem = btn.closest('.source-item');
+            const container = sourceItem.querySelector('.explanation-container');
+            const contentDiv = container.querySelector('.explanation-content');
+
+            // 如果已經顯示，則隱藏 (Toggle)
+            if (container.style.display !== 'none' && contentDiv.textContent) {
+                container.style.display = 'none';
+                return;
+            }
+
+            // 顯示載入狀態
+            container.style.display = 'block';
+            contentDiv.innerHTML = '<span class="spinner" style="display: inline-block; width: 20px; height: 20px; border-width: 2px;"></span> 正在分析中...';
+            btn.disabled = true;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '⏳ 分析中...';
+
+            try {
+                const response = await fetch('/explain', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        question: question,
+                        file_name: fileName,
+                        content: content
+                    }),
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || '分析失敗');
+                }
+
+                // 顯示結果
+                contentDiv.textContent = data.explanation;
+                btn.innerHTML = '🤖 重新分析';
+            } catch (error) {
+                contentDiv.innerHTML = `<span class="text-red-600">分析失敗: ${error.message}</span>`;
+                btn.innerHTML = originalText;
+            } finally {
+                btn.disabled = false;
+            }
+        }
     </script>
 </body>
+
 </html>

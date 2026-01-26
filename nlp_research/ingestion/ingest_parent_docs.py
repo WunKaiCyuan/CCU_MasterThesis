@@ -9,26 +9,14 @@ import logging
 from pathlib import Path
 from typing import List
 from core.serializable_mongodb_byte_store import SerializableMongoDBByteStore
-
-# 導入配置
-try:
-    from .config import Config
-except ImportError:
-    import sys
-    import os
-    ingestion_dir = os.path.dirname(os.path.abspath(__file__))
-    if ingestion_dir not in sys.path:
-        sys.path.insert(0, ingestion_dir)
-    from config import Config
-
+from core.config import Config
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.documents import Document
 from langchain_chroma import Chroma
 from langchain.retrievers import ParentDocumentRetriever
 import chromadb
-import pickle
-from ingestion.document_loader import load_documents
+from core.document_loader import load_documents
 
 
 # 設定日誌
@@ -43,7 +31,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def create_parent_child_vectorstore(documents: List):
+def create_parent_child_vectorstore(documents: List[Document]):
     """
     使用 Parent-Child 方式建立向量資料庫
     
@@ -142,8 +130,8 @@ def create_parent_child_vectorstore(documents: List):
         chunk_size=Config.PARENT_CHUNK_SIZE,
         chunk_overlap=Config.PARENT_CHUNK_OVERLAP,
         separators=[
-            "\n第[一二三四五六七八九十百]+條",
-            "第[一二三四五六七八九十百]+條",
+            "\n?第[一二三四五六七八九十百]+條",
+            "\n?[一二三四五六七八九十百]+、",
             "\n\n",
             "\n",
             "。",
@@ -157,8 +145,8 @@ def create_parent_child_vectorstore(documents: List):
         chunk_size=Config.CHILD_CHUNK_SIZE,
         chunk_overlap=Config.CHILD_CHUNK_OVERLAP,
         separators=[
-            "\n第[一二三四五六七八九十百]+條",
-            "第[一二三四五六七八九十百]+條",
+            "\n?第[一二三四五六七八九十百]+條",
+            "\n?[一二三四五六七八九十百]+、",
             "\n\n",
             "\n",
             "。",
@@ -174,54 +162,32 @@ def create_parent_child_vectorstore(documents: List):
         vectorstore=vectorstore,
         docstore=store,
         child_splitter=child_splitter,
-        parent_splitter=parent_splitter,
         search_kwargs={"k": 5}  # 檢索前 5 個 child 片段，然後返回對應的 parent
     )
     
     # 預處理和驗證文檔
     logger.info("正在驗證和預處理文檔...")
     processed_documents = []
-    total_docs = len(documents)
     
-    for i, doc in enumerate(documents, 1):
+    parent_docs = parent_splitter.split_documents(documents=documents)
+    total_parent_docs = len(parent_docs)
+    for i, doc in enumerate(parent_docs):
         try:
-            # 驗證文檔內容
-            if not doc.page_content or not doc.page_content.strip():
-                logger.warning(f"  跳過空文檔 {i}: {doc.metadata.get('filename', '未知')}")
-                continue
-            
-            # 清理和驗證 metadata
-            cleaned_metadata = {}
-            if doc.metadata:
-                for key, value in doc.metadata.items():
-                    # MongoDB 和 Chroma 只支援基本類型
-                    if isinstance(value, (str, int, float, bool)) or value is None:
-                        cleaned_metadata[key] = value
-                    else:
-                        # 將其他類型轉換為字符串
-                        cleaned_metadata[key] = str(value)
-            
             # 確保必要的 metadata 欄位存在
-            if "source" not in cleaned_metadata:
-                cleaned_metadata["source"] = doc.metadata.get("source", f"document_{i}")
-            if "filename" not in cleaned_metadata:
-                source = cleaned_metadata.get("source", "")
-                cleaned_metadata["filename"] = os.path.basename(source) if source else f"document_{i}"
+            source = doc.metadata.get("source")
+            file_name = os.path.basename(source) if source else None
             
-            # 添加來源資訊（如果啟用）
-            page_content = doc.page_content.strip()
-            if Config.INCLUDE_SOURCE:
-                file_name = cleaned_metadata.get("filename", "未知")
-                page_content = f"[資料來源:{file_name}]\n{page_content}"
+            # 添加來源資訊
+            page_content = f"[資料來源:{file_name}]\n{doc.page_content.strip()}"
             
-            # 創建清理後的文檔物件
-            clean_doc = Document(
+            # 創建文檔物件
+            processed_document = Document(
                 page_content=page_content,
-                metadata=cleaned_metadata
+                metadata={"source": source, "file_name": file_name}
             )
             
-            processed_documents.append(clean_doc)
-            logger.info(f"  ✅ 預處理文檔 {i}/{total_docs}: {cleaned_metadata.get('filename', '未知')}")
+            processed_documents.append(processed_document)
+            logger.info(f"  ✅ 預處理文檔 {i}/{total_parent_docs}: {file_name}")
             
         except Exception as prep_error:
             logger.error(f"  ❌ 預處理文檔 {i} 時發生錯誤: {prep_error}")
@@ -231,7 +197,7 @@ def create_parent_child_vectorstore(documents: List):
     if not processed_documents:
         raise ValueError("沒有有效的文檔可以添加！所有文檔都為空或格式不正確。")
     
-    logger.info(f"預處理完成，{len(processed_documents)}/{total_docs} 個文檔有效")
+    logger.info(f"預處理完成，{len(processed_documents)}/{total_parent_docs} 個文檔有效")
     
     # 添加文檔
     logger.info(f"正在將 {len(processed_documents)} 個文檔添加到 Parent-Child 結構中...")
@@ -279,7 +245,7 @@ def create_parent_child_vectorstore(documents: List):
         
         logger.info("")
         logger.info(f"✅ Parent-Child 資料庫建立成功！")
-        logger.info(f"   原始文檔數量: {total_docs} 個")
+        logger.info(f"   原始文檔數量: {total_parent_docs} 個")
         logger.info(f"   有效文檔數量: {len(processed_documents)} 個")
         logger.info(f"   成功添加: {successfully_added} 個")
         if failed_docs:

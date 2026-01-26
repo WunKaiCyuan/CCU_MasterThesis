@@ -9,3 +9,5 @@ nlp_research/mongo_data
 nlp_research/chroma_data
 nlp_research/llm_models
 **/__pycache__
+RAG_Evaluation_Framework/data
+RAG_Evaluation_Framework/output

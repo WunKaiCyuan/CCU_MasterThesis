@@ -8,35 +8,9 @@ import logging
 from typing import List
 from langchain_community.document_loaders import PyPDFLoader, UnstructuredWordDocumentLoader
 from langchain_core.documents import Document
+from core.text_cleaner import TextCleaner
 
 logger = logging.getLogger(__name__)
-
-
-def clean_text(text: str) -> str:
-    """
-    清理文本內容
-    - 將多個連續換行合併為單一換行
-    - 移除多餘的空格（但保留必要的空格）
-    
-    Args:
-        text: 原始文本
-        
-    Returns:
-        清理後的文本
-    """
-    # 將多個連續換行 (\n\n\n...) 取代為單一換行 (\n)
-    text = re.sub(r'\n{3,}', '\n\n', text)
-    
-    # 移除行首行尾的多餘空格，但保留行內必要的空格
-    lines = text.split('\n')
-    cleaned_lines = [line.strip() for line in lines]
-    text = '\n'.join(cleaned_lines)
-    
-    # 移除多餘的連續空格（但保留單一空格）
-    text = re.sub(r' {2,}', ' ', text)
-    
-    return text
-
 
 def load_documents(
     data_dir: str, 
@@ -96,7 +70,12 @@ def load_documents(
             
             # 清理文本內容（如果需要）
             if clean:
-                full_content = clean_text(full_content)
+                full_content = (TextCleaner(full_content)
+                                .fix_line_breaks()
+                                .remove_special_characters()
+                                .remove_extra_spaces()
+                                .normalize_newlines()
+                                .get_result())
             
             # 保持 metadata 一致，這對後續 ParentDocumentRetriever 很重要
             merged_doc = Document(
@@ -116,3 +95,51 @@ def load_documents(
     
     logger_instance.info(f"文件讀取完成，共載入 {len(raw_documents)} 個完整檔案物件")
     return raw_documents
+
+
+def load_single_document(file_path: str, clean: bool = False) -> Document:
+    """
+    載入單一文件 (PDF/DOCX)
+    
+    Args:
+        file_path: 檔案絕對路徑
+        clean: 是否清理文本
+        
+    Returns:
+        Document 物件
+    """
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"檔案不存在: {file_path}")
+        
+    ext = os.path.splitext(file_path)[1].lower()
+    
+    loaders_info = {
+        ".pdf": PyPDFLoader,
+        ".docx": UnstructuredWordDocumentLoader
+    }
+    
+    if ext not in loaders_info:
+        raise ValueError(f"不支援的檔案格式: {ext}")
+        
+    loader_cls = loaders_info[ext]
+    loaded_pages = loader_cls(file_path).load()
+    
+    if not loaded_pages:
+        raise ValueError("檔案內容為空")
+        
+    # 合併所有頁面
+    full_content = "\n".join([p.page_content for p in loaded_pages])
+    
+    # 清理
+    if clean:
+        full_content = (TextCleaner(full_content)
+                        .fix_line_breaks()
+                        .remove_special_characters()
+                        .remove_extra_spaces()
+                        .normalize_newlines()
+                        .get_result())
+                        
+    return Document(
+        page_content=full_content,
+        metadata={"source": file_path, "filename": os.path.basename(file_path)}
+    )

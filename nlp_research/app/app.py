@@ -7,7 +7,7 @@ import sys
 import time
 import logging
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, HTMLResponse
@@ -25,6 +25,9 @@ from phoenix.otel import register
 import chromadb
 from langchain.retrievers import ParentDocumentRetriever
 from core.config import Config
+from core.serializable_mongodb_byte_store import SerializableMongoDBByteStore
+from langchain.retrievers.multi_vector import SearchType
+
 
 # 驗證設定
 try:
@@ -78,6 +81,7 @@ app = FastAPI(
 # 全域變數儲存初始化的組件
 rag_chain = None
 vectorstore = None
+global_retriever = None
 
 # 設定模板和靜態文件
 templates_dir = os.path.join(os.path.dirname(__file__), "templates")
@@ -91,6 +95,10 @@ static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
+# 掛載文檔目錄
+if os.path.exists(Config.DATA_DIR):
+    app.mount("/documents", StaticFiles(directory=Config.DATA_DIR), name="documents")
+
 
 # ==========================================
 # 請求/回應模型定義
@@ -98,6 +106,7 @@ if os.path.exists(static_dir):
 class QueryRequest(BaseModel):
     """查詢請求模型"""
     question: str = Field(..., description="要詢問的問題", min_length=1, max_length=500)
+    skip_llm: bool = Field(False, description="是否跳過 LLM 生成，僅執行檢索")
     
     @field_validator('question')
     @classmethod
@@ -107,11 +116,26 @@ class QueryRequest(BaseModel):
         return v.strip()
 
 
+class ExplainRequest(BaseModel):
+    """解釋請求模型"""
+    question: str = Field(..., description="原始問題")
+    file_name: str = Field(..., description="檔案名稱")
+    content: str = Field(..., description="文獻內容片段")
+
+
+class Source(BaseModel):
+    """來源文獻模型"""
+    file_name: str = Field(..., description="檔案名稱")
+    content: str = Field(..., description="文獻內容片段")
+    download_url: Optional[str] = Field(None, description="下載連結")
+
+
 class QueryResponse(BaseModel):
     """查詢回應模型"""
     answer: str = Field(..., description="系統回答")
     processing_time: float = Field(..., description="處理時間（秒）")
     timestamp: str = Field(..., description="查詢時間戳")
+    sources: List[Source] = Field([], description="參考來源文獻")
 
 
 class HealthResponse(BaseModel):
@@ -127,7 +151,7 @@ class HealthResponse(BaseModel):
 # ==========================================
 def initialize_components():
     """初始化所有 RAG 組件"""
-    global rag_chain, vectorstore, llm
+    global rag_chain, vectorstore, llm, global_retriever
     
     logger.info("開始初始化 RAG 組件...")
     
@@ -167,17 +191,6 @@ def initialize_components():
         raise
 
     try:
-        # 導入配置模組
-        # 優先嘗試相對導入（作為模組時），失敗則嘗試絕對導入（直接運行時）
-        try:
-            from ..core.serializable_mongodb_byte_store import SerializableMongoDBByteStore
-        except ImportError:
-            # 直接運行時，確保當前目錄在路徑中
-            app_dir = os.path.dirname(os.path.abspath(__file__))
-            if app_dir not in sys.path:
-                sys.path.insert(0, app_dir)
-            from nlp_research.core.serializable_mongodb_byte_store import SerializableMongoDBByteStore
-
         store = SerializableMongoDBByteStore(
             connection_string=Config.MONGODB_CONNECTION_STRING,
             db_name=Config.MONGODB_DB_NAME,
@@ -198,27 +211,12 @@ def initialize_components():
     # )
     
     # 建立切分器（必須與建置時相同）
-    parent_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=Config.PARENT_CHUNK_SIZE,
-        chunk_overlap=Config.PARENT_CHUNK_OVERLAP,
-        separators=[
-            "\n第[一二三四五六七八九十百]+條",
-            "第[一二三四五六七八九十百]+條",
-            "\n\n",
-            "\n",
-            "。",
-            " ",
-            ""
-        ],
-        is_separator_regex=True
-    )
-    
     child_splitter = RecursiveCharacterTextSplitter(
         chunk_size=Config.CHILD_CHUNK_SIZE,
         chunk_overlap=Config.CHILD_CHUNK_OVERLAP,
         separators=[
-            "\n第[一二三四五六七八九十百]+條",
-            "第[一二三四五六七八九十百]+條",
+            "\n?第[一二三四五六七八九十百]+條",
+            "\n?[一二三四五六七八九十百]+、",
             "\n\n",
             "\n",
             "。",
@@ -232,9 +230,13 @@ def initialize_components():
         vectorstore=vectorstore,
         docstore=store,
         child_splitter=child_splitter,
-        parent_splitter=parent_splitter,
-        search_kwargs={"k": 5}  # 檢索前 5 個 child 片段，然後返回對應的 parent
+        search_kwargs={"k": Config.RETRIEVER_K},  # 檢索前 K 個 child 片段，然後返回對應的 parent
+        search_type=SearchType.similarity
     )
+    
+    # 將 retriever 存為全域變數，供 skip_llm 模式使用
+    global global_retriever
+    global_retriever = parent_document_retriever
     
     # 4. 初始化 LLM 模型
     logger.info(f"初始化 LLM 模型 ({Config.LLM_MODEL_NAME})...")
@@ -242,6 +244,7 @@ def initialize_components():
         llm = ChatOllama(
             model=Config.LLM_MODEL_NAME,
             temperature=Config.LLM_TEMPERATURE,
+            num_thread=Config.LLM_THREADS
         )
         logger.info("LLM 模型初始化成功")
     except Exception as e:
@@ -293,12 +296,17 @@ def initialize_components():
     rag_chain = (
         {
             # "context": retriever | format_docs,
-            "context": parent_document_retriever | format_docs,
+            "context": parent_document_retriever,
             "question": RunnablePassthrough()
         }
-        | prompt
-        | llm
-        | StrOutputParser()
+        | RunnablePassthrough.assign(
+            formatted_context=lambda x: format_docs(x["context"])
+        )
+        | RunnablePassthrough.assign(
+            answer=(
+                lambda x: ChatPromptTemplate.from_template(template).format(context=x["formatted_context"], question=x["question"])
+            ) | llm | StrOutputParser()
+        )
     )
     
     logger.info("所有組件初始化完成")
@@ -370,7 +378,76 @@ async def query(request: QueryRequest):
     
     try:
         # 執行 RAG 查詢
-        answer = rag_chain.invoke(request.question)
+        if request.skip_llm:
+            # 純檢索模式
+            logger.info("執行純檢索模式 (Skip LLM)")
+            # 直接使用 retriever 檢索文檔
+            # 注意：rag_chain 中的 retriever 是 parent_document_retriever
+            # 我們需要存取 rag_chain 內部的 retriever，或者直接使用全域變數
+            
+            # 從全域變數 rag_chain 中提取 retriever 比較困難，因為它已經被封裝在 Runnable 中
+            # 但我們在 initialize_components 中有定義 parent_document_retriever
+            # 這裡簡單起見，我們重新建立一個 retriever 實例或者改用全域變數方式
+            # 由於 initialize_components 是封閉的，我們需要修改它把 retriever 存到全域，
+            # 或者我們可以利用 rag_chain 的第一步 invoke
+            
+            # 使用 Runnable 的 step 1
+            # rag_chain = (step1 | step2 | ...)
+            # 這裡我們稍微 hack 一下，直接使用 vectorstore 進行相似度搜尋
+            # 但這樣會失去 ParentDocumentRetriever 的功能 (返回大區塊)
+            
+            # 最好的方式是修改 initialize_components 讓它返回 retriever，或者設為全域
+            # 暫時解決方案：修改 initialize_components 將 retriever 存為 app.state.retriever
+            # 但這需要重啟。
+            
+            # 替代方案：執行 chain 但攔截
+            # 由於 chain 是固定的，我們無法輕易攔截中間結果而不執行 LLM
+            
+            # 讓我們修改 initialize_components，把 retriever 設為全域變數
+            global global_retriever
+            if 'global_retriever' in globals() and global_retriever:
+                docs = global_retriever.invoke(request.question)
+                answer = "已完成檢索 (LLM Skipped)"
+            else:
+                # Fallback: 如果沒有全域 retriever，只好執行完整 chain (這不符合需求)
+                # 或者我們嘗試從 vectorstore 檢索 (僅 Child chunks)
+                logger.warning("找不到全域 retriever，使用 vectorstore 進行簡易檢索")
+                if vectorstore:
+                     docs = vectorstore.similarity_search(request.question, k=Config.RETRIEVER_K)
+                     answer = "已完成檢索 (Fallback: Vectorstore Only)"
+                else:
+                     raise HTTPException(status_code=500, detail="Retriever not available")
+        else:
+            # 完整 RAG 模式
+            result = rag_chain.invoke(request.question)
+            
+            # 解析結果
+            if isinstance(result, dict):
+                 answer = result.get("answer", "")
+                 docs = result.get("context", [])
+            else:
+                 # 相容舊版回傳
+                 answer = str(result)
+                 docs = []
+             
+        # 格式化來源
+        sources = []
+        for doc in docs:
+            # 嘗試從 metadata 獲取檔名
+            file_name = doc.metadata.get("file_name") or doc.metadata.get("filename") or "Unknown"
+            
+            # 產生下載連結
+            # 假設 Config.DATA_DIR 中的檔案可以直接透過 /documents/<file_name> 訪問
+            # 注意：這裡假設 file_name 就是檔名，但在 ingest_parent_docs.py 中 file_name 確實是 basename
+            download_url = f"/documents/{file_name}" if file_name != "Unknown" else None
+            
+            # 如果是 Parent Document，可能我們已經在 page_content 中添加了 "[資料來源:xxx]"，這裡可以不做額外處理
+            # 或者我們可以保留原始 page_content
+            sources.append(Source(
+                file_name=file_name,
+                content=doc.page_content[:300] + "..." if len(doc.page_content) > 300 else doc.page_content,
+                download_url=download_url
+            ))
         
         elapsed_time = time.time() - start_time
         logger.info(f"查詢完成，耗時 {elapsed_time:.2f} 秒")
@@ -378,7 +455,8 @@ async def query(request: QueryRequest):
         return QueryResponse(
             answer=answer,
             processing_time=round(elapsed_time, 2),
-            timestamp=datetime.now().isoformat()
+            timestamp=datetime.now().isoformat(),
+            sources=sources
         )
     except Exception as e:
         elapsed_time = time.time() - start_time
@@ -410,6 +488,78 @@ async def query_get(
     # 使用 POST 端點的邏輯
     request = QueryRequest(question=question.strip())
     return await query(request)
+
+
+@app.post("/explain", tags=["說明"])
+async def explain(request: ExplainRequest):
+    """
+    解釋端點
+    
+    請求 LLM 解釋特定文獻內容如何回答使用者的問題。
+    """
+    if not llm:
+        raise HTTPException(status_code=503, detail="LLM 尚未初始化完成")
+        
+    try:
+        # 建構完整檔案路徑
+        file_path = os.path.join(Config.DATA_DIR, request.file_name)
+        
+        # 載入完整文件內容
+        # 注意：這裡假設 ingestion 已經將 document_loader.py 移至 core 目錄
+        # 如果尚未移動，請確保路徑正確
+        from core.document_loader import load_single_document
+        
+        # 讀取完整文件 (啟用基本清理)
+        try:
+            full_doc = load_single_document(file_path, clean=True)
+            full_content = full_doc.page_content
+            # 截斷過長內容以避免超過 Context Window (例如最多 15000 字)
+            if len(full_content) > 15000:
+                 logger.warning(f"文件 {request.file_name} 內容過長 ({len(full_content)} 字)，進行截斷")
+                 full_content = full_content[:15000] + "\n...(內容已截斷)..."
+        except FileNotFoundError:
+            # 如果找不到文件 (可能是測試環境或路徑問題)，降級使用 request.content
+            logger.warning(f"找不到原始文件 {file_path}，降級使用片段內容")
+            full_content = request.content
+        except Exception as e:
+            logger.error(f"讀取原始文件失敗: {e}，降級使用片段內容")
+            full_content = request.content
+
+        explanation_template = """你是一位專業的校規諮詢助教。使用者提出了一個問題，並提供了一份完整的參考文件內容。
+你的任務是詳細分析這份文件，判斷它是否包含回答使用者問題的資訊。
+
+## 使用者問題
+{question}
+
+## 參考文件全文 ({file_name})
+{content}
+
+## 分析要求
+1. **關聯性判斷**：請先判斷這份文件是否與問題相關。
+2. **具體引用**：如果相關，請務必指出是**第幾條**、**第幾項**或**哪一個章節**回答了這個問題。
+3. **回答生成**：根據文件內容，簡潔扼要地回答問題。
+4. **無關處理**：如果整份文件都與問題無關，請直接回答「此文件內容與問題無直接關聯」。
+
+## 你的回答
+請儘量控制在 300 字以內，並採用以下格式：
+- **關聯性**：(高度相關/部分相關/無關)
+- **依據條文**：(例如：第三條第二項、教務章程第五章等，若無則免填)
+- **說明**：(你的分析與回答)
+"""
+        prompt = ChatPromptTemplate.from_template(explanation_template)
+        chain = prompt | llm | StrOutputParser()
+        
+        result = chain.invoke({
+            "question": request.question,
+            "file_name": request.file_name,
+            "content": full_content
+        })
+        
+        return {"explanation": result}
+        
+    except Exception as e:
+        logger.error(f"解釋生成失敗: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"解釋生成失敗: {str(e)}")
 
 
 # ==========================================

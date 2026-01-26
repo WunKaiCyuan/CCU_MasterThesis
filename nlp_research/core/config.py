@@ -58,6 +58,7 @@ class Config:
     # LLM 模型設定
     LLM_MODEL_NAME = _get("LLM", "MODEL_NAME", str)
     LLM_TEMPERATURE = _get("LLM", "TEMPERATURE", float)
+    LLM_THREADS = _get("LLM", "THREADS", int)
     
     # Phoenix 監控設定
     PHOENIX_ENDPOINT = _get("Phoenix", "ENDPOINT", str)
@@ -89,7 +90,6 @@ class Config:
     DATA_DIR = _get("Ingestion", "DATA_DIR", str)
     CHUNK_SIZE = _get("Ingestion", "CHUNK_SIZE", int)
     CHUNK_OVERLAP = _get("Ingestion", "CHUNK_OVERLAP", int)
-    INCLUDE_SOURCE = _get("Ingestion", "INCLUDE_SOURCE", lambda x: x.lower() == "true")
     
     @classmethod
     def validate(cls):

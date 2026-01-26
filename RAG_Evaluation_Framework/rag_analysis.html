@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG 檢索實驗結果分析</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #f4f7f6; padding: 20px; }
+        .container { max-width: 1000px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #333; }
+        .chart-wrapper { position: relative; margin-bottom: 40px; height: 450px; }
+        .controls { text-align: center; margin-bottom: 20px; }
+        select { padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>RAG 檢索策略指標對比</h1>
+    
+    <div class="controls">
+        <label for="metricSelect">選擇觀測指標：</label>
+        <select id="metricSelect">
+            <option value="Hit Rate">Hit Rate</option>
+            <option value="MRR">MRR</option>
+            <option value="Mean Recall">Mean Recall</option>
+            <option value="Mean Precision">Mean Precision</option>
+            <option value="MAP">MAP</option>
+        </select>
+    </div>
+
+    <div class="chart-wrapper">
+        <canvas id="experimentChart"></canvas>
+    </div>
+</div>
+
+<script>
+    let chartInstance = null;
+    let rawData = [];
+
+    // 讀取 JSON 資料
+    async function loadData() {
+        try {
+            // 注意：請確保此 HTML 與 ./output/ 資料夾的相對位置正確
+            const response = await fetch('./output/final_experiment_comparison.json');
+            rawData = await response.json();
+            renderChart('Hit Rate'); // 預設顯示 Hit Rate
+        } catch (error) {
+            console.error("無法讀取 JSON 資料，請檢查路徑或 CORS 限制:", error);
+            alert("無法讀取資料。如果是本地直接打開，請使用 Live Server 或將 JSON 內嵌至 script 中。");
+        }
+    }
+
+    function renderChart(selectedMetric) {
+        const ctx = document.getElementById('experimentChart').getContext('2d');
+        
+        // 1. 取得所有的 K 值 (X 軸)
+        const kLabels = [...new Set(rawData.map(d => d.K))].sort((a, b) => a - b);
+        
+        // 2. 根據 Strategy 分組
+        const strategies = [...new Set(rawData.map(d => d.Strategy))];
+        
+        const colors = [
+            { border: 'rgba(54, 162, 235, 1)', bg: 'rgba(54, 162, 235, 0.2)' },
+            { border: 'rgba(255, 99, 132, 1)', bg: 'rgba(255, 99, 132, 0.2)' },
+            { border: 'rgba(75, 192, 192, 1)', bg: 'rgba(75, 192, 192, 0.2)' }
+        ];
+
+        const datasets = strategies.map((strategy, index) => {
+            const strategyData = rawData.filter(d => d.Strategy === strategy);
+            return {
+                label: strategy,
+                data: kLabels.map(k => {
+                    const entry = strategyData.find(d => d.K === k);
+                    return entry ? entry[selectedMetric] : null;
+                }),
+                borderColor: colors[index % colors.length].border,
+                backgroundColor: colors[index % colors.length].bg,
+                tension: 0.3,
+                fill: false,
+                pointRadius: 6,
+                pointHoverRadius: 8
+            };
+        });
+
+        if (chartInstance) {
+            chartInstance.destroy();
+        }
+
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: kLabels.map(k => `K=${k}`),
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 1.0,
+                        title: { display: true, text: '數值 (0.0 - 1.0)' }
+                    },
+                    x: {
+                        title: { display: true, text: '檢索數量 (K)' }
+                    }
+                },
+                plugins: {
+                    legend: { position: 'top' },
+                    tooltip: { mode: 'index', intersect: false }
+                }
+            }
+        });
+    }
+
+    // 監聽下拉選單切換
+    document.getElementById('metricSelect').addEventListener('change', (e) => {
+        renderChart(e.target.value);
+    });
+
+    loadData();
+</script>
+
+</body>
+</html>

@@ -6,17 +6,7 @@ import os
 import sys
 from pathlib import Path
 from typing import List
-
-# 導入配置
-try:
-    from .config import Config
-except ImportError:
-    import sys
-    import os
-    ingestion_dir = os.path.dirname(os.path.abspath(__file__))
-    if ingestion_dir not in sys.path:
-        sys.path.insert(0, ingestion_dir)
-    from config import Config
+from core.config import Config
 
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
