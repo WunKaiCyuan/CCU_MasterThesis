@@ -61,11 +61,6 @@
         // 2. 根據 Strategy 分組
         const strategies = [...new Set(rawData.map(d => d.Strategy))];
         
-        const colors = [
-            { border: 'rgba(54, 162, 235, 1)', bg: 'rgba(54, 162, 235, 0.2)' },
-            { border: 'rgba(255, 99, 132, 1)', bg: 'rgba(255, 99, 132, 0.2)' },
-            { border: 'rgba(75, 192, 192, 1)', bg: 'rgba(75, 192, 192, 0.2)' }
-        ];
 
         const datasets = strategies.map((strategy, index) => {
             const strategyData = rawData.filter(d => d.Strategy === strategy);
@@ -75,8 +70,6 @@
                     const entry = strategyData.find(d => d.K === k);
                     return entry ? entry[selectedMetric] : null;
                 }),
-                borderColor: colors[index % colors.length].border,
-                backgroundColor: colors[index % colors.length].bg,
                 tension: 0.3,
                 fill: false,
                 pointRadius: 6,

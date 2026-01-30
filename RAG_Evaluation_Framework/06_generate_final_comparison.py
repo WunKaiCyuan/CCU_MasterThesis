@@ -4,8 +4,12 @@ import pandas as pd
 
 # --- 配置區 ---
 EXP_FILES = {
-    "Fixed (4-0)": "./output/evaluation_full_report_4-0.json",
-    "Semantic (4-1)": "./output/evaluation_full_report_4-1.json"
+    "01 Fixed (4-0)": "./output/evaluation_full_report_4-0.json",
+    "02 Semantic (4-1)": "./output/evaluation_full_report_4-1.json",
+    "03 Fixed mmr (4-2)": "./output/evaluation_full_report_4-2.json",
+    "04 Semantic mmr (4-3)": "./output/evaluation_full_report_4-3.json",
+    "05 Fixed rerank (4-4)": "./output/evaluation_full_report_4-4.json",
+    "06 Semantic rerank (4-5)": "./output/evaluation_full_report_4-5.json"
 }
 OUTPUT_CSV = "./output/final_comparison_table.csv"
 OUTPUT_JSON = "./output/final_experiment_comparison.json"
