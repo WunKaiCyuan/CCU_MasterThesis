@@ -13,7 +13,7 @@ class SummaryResponse(typing.TypedDict):
     keywords: list
 
 # --- 2. 配置 ---
-GENAI_API_KEY = "AIzaSyDMstSsxvsB2p87097R-RHX3G07IFRndtE"
+GENAI_API_KEY = "API_KEY"
 MODEL_NAME = "models/gemini-2.5-flash"
 genai.configure(api_key=GENAI_API_KEY)
 
