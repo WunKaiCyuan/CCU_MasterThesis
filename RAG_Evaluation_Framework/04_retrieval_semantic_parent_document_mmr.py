@@ -27,7 +27,7 @@ EXP_CONFIG = {
     "OUTPUT_JSON_PATH": "./output/retrieval_results_semantic_parent_mmr.json",
     
     # 檢索參數
-    "K": 5
+    "K": 8
 }
 
 def main():

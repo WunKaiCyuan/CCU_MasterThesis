@@ -41,7 +41,7 @@ EXP_CONFIG = {
     "PARENT_CHUNK_OVERLAP": 0,
     
     # 檢索參數
-    "K": 5
+    "K": 8
 }
 
 def main():
@@ -92,6 +92,7 @@ def main():
         docstore=mongo_store,
         child_splitter=child_splitter,
         parent_splitter=parent_splitter,
+        search_kwargs={"k": EXP_CONFIG["K"]}
     )
 
     # --- 6. 載入測試數據與索引 ---
@@ -117,7 +118,8 @@ def main():
         query_text = f"query: {q['question']}"
         
         # 檢索並取前 K 個
-        retrieved_docs = retriever.invoke(query_text)[:EXP_CONFIG["K"]]
+        # retrieved_docs = retriever.invoke(query_text)[:EXP_CONFIG["K"]]
+        retrieved_docs = vectorstore.similarity_search(query_text, k=EXP_CONFIG["K"])
         
         candidates = []
         for doc in retrieved_docs:

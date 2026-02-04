@@ -5,11 +5,11 @@ from core.metrics_utils import calculate_detailed_metrics
 
 # --- 配置區 ---
 EXP_CONFIG = {
-    "STRATEGY_NAME": "Semantic_Chunking_MMR",
-    "EMBEDDING_MODEL": "intfloat/multilingual-e5-small",
+    "STRATEGY_NAME": "FULL_LLM",
+    "LLM_MODEL": "gemini-2.5-flash",
     "GROUND_TRUTH_PATH": "./output/ai_evidence_report.json",
-    "PREDICTION_PATH": "./output/retrieval_results_semantic_parent_mmr.json",
-    "OUTPUT_REPORT_PATH": "./output/evaluation_full_report_4-3.json",
+    "PREDICTION_PATH": "./output/retrieval_results_full_llm_scan.json",
+    "OUTPUT_REPORT_PATH": "./output/evaluation_full_report_4-6.json",
     "K_VALUES": [1, 3, 5, 8]
 }
 
@@ -41,7 +41,7 @@ def main():
     full_report = {
         "experiment_metadata": {
             "strategy": EXP_CONFIG["STRATEGY_NAME"],
-            "embedding_model": EXP_CONFIG["EMBEDDING_MODEL"],
+            "llm_model": EXP_CONFIG["LLM_MODEL"],
             "evaluation_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "total_questions_evaluated": len(gt_map)
         },

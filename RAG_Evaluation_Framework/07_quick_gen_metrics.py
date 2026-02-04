@@ -34,12 +34,13 @@ def main():
     # 定義實驗流水線順序
     pipeline = [
         # 1. 檢索測試階段 (Retrieval Tests)
-        "04_retrieval_parent_document_mmr",
-        "04_retrieval_parent_document_rerank",
-        "04_retrieval_parent_document",
-        "04_retrieval_semantic_parent_document_mmr",
-        "04_retrieval_semantic_parent_document_rerank",
-        "04_retrieval_semantic_parent_document",
+        # "04_retrieval_parent_document_mmr",
+        # "04_retrieval_parent_document_rerank",
+        # "04_retrieval_parent_document",
+        # "04_retrieval_semantic_parent_document_mmr",
+        # "04_retrieval_semantic_parent_document_rerank",
+        # "04_retrieval_semantic_parent_document",
+        "04_generate_all_hybrid_results",
         
         # 2. 評估階段 (Evaluation Metrics Calculation)
         "05_eval_fixed_mmr",
@@ -48,6 +49,8 @@ def main():
         "05_eval_semantic_mmr",
         "05_eval_semantic_rerank",
         "05_eval_semantic",
+        "05_eval_full_llm",
+        "05_eval_hybrid",
         
         # 3. 最終圖表與報告生成 (Final Report)
         "06_generate_final_comparison"

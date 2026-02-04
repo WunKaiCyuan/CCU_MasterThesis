@@ -42,7 +42,7 @@ EXP_CONFIG = {
     "PARENT_CHUNK_OVERLAP": 0,
     
     # 檢索參數
-    "K": 5
+    "K": 8
 }
 
 def main():
@@ -119,7 +119,8 @@ def main():
         query_text = f"query: {q['question']}"
         
         # 檢索並取前 K 個
-        retrieved_docs = retriever.invoke(query_text)[:EXP_CONFIG["K"]]
+        # retrieved_docs = retriever.invoke(query_text)[:EXP_CONFIG["K"]]
+        retrieved_docs = vectorstore.max_marginal_relevance_search(query_text, k=EXP_CONFIG["K"])
         
         candidates = []
         for doc in retrieved_docs:

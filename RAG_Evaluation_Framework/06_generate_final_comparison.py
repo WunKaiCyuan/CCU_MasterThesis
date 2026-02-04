@@ -9,7 +9,14 @@ EXP_FILES = {
     "03 Fixed mmr (4-2)": "./output/evaluation_full_report_4-2.json",
     "04 Semantic mmr (4-3)": "./output/evaluation_full_report_4-3.json",
     "05 Fixed rerank (4-4)": "./output/evaluation_full_report_4-4.json",
-    "06 Semantic rerank (4-5)": "./output/evaluation_full_report_4-5.json"
+    "06 Semantic rerank (4-5)": "./output/evaluation_full_report_4-5.json",
+    "07 Full LLM (4-6)": "./output/evaluation_full_report_4-6.json",
+    "071 Fixed (4-0) Hybrid": "./output/evaluation_full_report_4-7.json",
+    "072 Semantic (4-1) Hybrid": "./output/evaluation_full_report_4-8.json",
+    "073 Fixed mmr (4-2) Hybrid": "./output/evaluation_full_report_4-9.json",
+    "074 Semantic mmr (4-3) Hybrid": "./output/evaluation_full_report_4-10.json",
+    "075 Fixed rerank (4-4) Hybrid": "./output/evaluation_full_report_4-11.json",
+    "076 Semantic rerank (4-5) Hybrid": "./output/evaluation_full_report_4-12.json",
 }
 OUTPUT_CSV = "./output/final_comparison_table.csv"
 OUTPUT_JSON = "./output/final_experiment_comparison.json"
@@ -27,12 +34,13 @@ def main():
         with open(file_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
             metrics = data.get("summary_metrics", {})
+            metadata = data.get("experiment_metadata", {})
             
             # 解析 at_k_1, at_k_3, at_k_5
             for k_key, values in metrics.items():
                 k_val = k_key.split('_')[-1] # 取得 1, 3, 5
                 comparison_rows.append({
-                    "Strategy": strategy_label,
+                    "Strategy": metadata.get("strategy", ""),
                     "K": int(k_val),
                     "Hit Rate": values.get("hit_rate", 0),
                     "MRR": values.get("mrr", 0),
@@ -47,7 +55,7 @@ def main():
 
     # 1. 轉換為 DataFrame 並排序
     df = pd.DataFrame(comparison_rows)
-    df = df.sort_values(by=["K", "Strategy"]) # 先按 K 排序，再按策略排
+    df = df.sort_values(by=["Strategy", "K"]) # 先按 K 排序，再按策略排
 
     # 2. 格式化百分比 (美化輸出，但在儲存 JSON 時保留原始數值)
     df_display = df.copy()

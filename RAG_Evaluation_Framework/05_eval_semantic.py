@@ -5,12 +5,12 @@ from core.metrics_utils import calculate_detailed_metrics
 
 # --- 配置區 ---
 EXP_CONFIG = {
-    "STRATEGY_NAME": "Semantic_Chunking_4-1",
+    "STRATEGY_NAME": "Semantic_Chunking",
     "EMBEDDING_MODEL": "intfloat/multilingual-e5-small",
     "GROUND_TRUTH_PATH": "./output/ai_evidence_report.json",
     "PREDICTION_PATH": "./output/retrieval_results_semantic_parent.json",
     "OUTPUT_REPORT_PATH": "./output/evaluation_full_report_4-1.json",
-    "K_VALUES": [1, 3, 5]
+    "K_VALUES": [1, 3, 5, 8]
 }
 
 def main():

@@ -7,29 +7,19 @@ from core.document_loader import load_documents
 import typing_extensions as typing
 
 # --- 1. 定義 Schema ---
-class AuditDetail(typing.TypedDict):
-    is_relevant: bool
-    evidence_quote: str
-    is_sufficient: bool
-    ai_reasoning: str
-
-class VerificationResult(typing.TypedDict):
-    doc_id: str
-    file_name: str
-    ai_audit: AuditDetail
-
-class SingleQuestionResponse(typing.TypedDict):
-    verification_results: list[VerificationResult]
+class SummaryResponse(typing.TypedDict):
+    summary: str
+    doc_name: str
+    keywords: list
 
 # --- 2. 配置 ---
-GENAI_API_KEY = "API_KEY"
+GENAI_API_KEY = "AIzaSyDMstSsxvsB2p87097R-RHX3G07IFRndtE"
 MODEL_NAME = "models/gemini-2.5-flash"
 genai.configure(api_key=GENAI_API_KEY)
 
 INDEX_PATH = "./output/document_index.json"
 DATA_DIR = "/Volumes/Shared/MasterThesis/RAG_Evaluation_Framework/data"
-QUESTIONS_PATH = "./output/generated_questions.json"
-OUTPUT_PATH = "./output/ai_evidence_report.json"
+OUTPUT_PATH = "./output/document_summaries.json"
 
 # --- 3. 工具程式 ---
 def load_json(path):
@@ -44,18 +34,17 @@ def save_json(data, path):
         json.dump(data, f, ensure_ascii=False, indent=4)
 
 def main():
-    # 讀取索引與題目
+    # 讀取索引與檔案內容
     index_data = load_json(INDEX_PATH)
     file_map = {doc["file_name"].strip(): doc["doc_id"] for doc in index_data.get("documents", [])}
-    questions = load_json(QUESTIONS_PATH)
 
     # 讀取現有結果 (斷點續傳關鍵)
     final_report = load_json(OUTPUT_PATH)
-    done_ids = {r["question_id"] for r in final_report}
+    done_ids = {r["doc_id"] for r in final_report}
     print(f"🔄 偵測到已完成 {len(done_ids)} 題，將從下一題開始...")
 
     # 1. 載入並準備快取內容 (僅在有新題目要跑時才做)
-    if len(done_ids) < len(questions):
+    if len(done_ids) < len(file_map):
         print("📂 載入文檔並建立快取...")
         langchain_docs = load_documents(DATA_DIR, clean=True)
         all_contents = []
@@ -66,7 +55,7 @@ def main():
 
         cache = genai.caching.CachedContent.create(
             model=MODEL_NAME,
-            display_name="golden_dataset_cache",
+            display_name="ccu_rule_documents_cache",
             contents=all_contents,
             ttl=timedelta(hours=1)
         )
@@ -76,35 +65,36 @@ def main():
             generation_config={
                 "temperature": 0,
                 "response_mime_type": "application/json",
-                "response_schema": SingleQuestionResponse,
+                "response_schema": SummaryResponse,
             }
         )
 
         # 2. 批次詢問迴圈
-        for q_item in questions:
-            q_id = q_item["id"]
-            if q_id in done_ids:
+        for doc_item in index_data.get("documents", []):
+            doc_id = doc_item["doc_id"]
+            doc_name = doc_item["file_name"]
+            if doc_id in done_ids:
                 continue
 
-            print(f"🔎 正在處理 Q{q_id}: {q_item['question'][:15]}...")
-            prompt = f"問題：{q_item['question']}\n任務：請找出所有相關校規文件並分析關聯性。"
+            print(f"🔎 正在處理 {doc_id} 文檔: {doc_name[:15]}...")
+            prompt = f"文檔名稱：{doc_name}\n任務：請針對此文檔內容生成 150-200 字的『檢索專用摘要』。請包含：1.核心規範事項（如：休學、學分抵免、獎勵申請）。2.關鍵限制條件。目的是讓另一個 LLM 能僅憑此摘要判斷該文檔是否與使用者的問題相關。"
 
             try:
                 response = model.generate_content(prompt)
                 res_json = json.loads(response.text)
 
                 final_report.append({
-                    "question_id": q_id,
-                    "question": q_item["question"],
-                    "verification_results": res_json.get("verification_results", []),
-                    "expert_final_check": ""
+                    "doc_id": doc_id,
+                    "doc_name": doc_name,
+                    "summary": res_json.get("summary", ""),
+                    "keywords": res_json.get("keywords", [])
                 })
                 
-                # 每題跑完立即存檔，防止程式崩潰
+                # 每份文檔跑完立即存檔，防止程式崩潰
                 save_json(final_report, OUTPUT_PATH)
                 
             except Exception as e:
-                print(f"❌ Q{q_id} 失敗: {e}")
+                print(f"❌ {doc_id} 失敗: {e}")
                 # 遇到錯誤通常是 API 限制，稍微休息長一點
                 time.sleep(30)
                 continue

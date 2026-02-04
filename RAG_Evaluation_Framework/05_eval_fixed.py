@@ -5,14 +5,14 @@ from core.metrics_utils import calculate_detailed_metrics
 
 # --- 配置區 ---
 EXP_CONFIG = {
-    "STRATEGY_NAME": "Fixed_Chunking_4-0",
+    "STRATEGY_NAME": "Fixed_Chunking",
     "EMBEDDING_MODEL": "intfloat/multilingual-e5-small",
     "CHUNK_SIZE": 200,
     "CHUNK_OVERLAP": 20,
     "GROUND_TRUTH_PATH": "./output/ai_evidence_report.json",
     "PREDICTION_PATH": "./output/retrieval_results_parent_doc.json",
     "OUTPUT_REPORT_PATH": "./output/evaluation_full_report_4-0.json",
-    "K_VALUES": [1, 3, 5]
+    "K_VALUES": [1, 3, 5, 8]
 }
 
 def main():
@@ -45,7 +45,7 @@ def main():
 
     # 5. 整合完整報告 (Metadata + Summary + Detailed Results)
     full_report = {
-        "experiment_info": {
+        "experiment_metadata": {
             "strategy": EXP_CONFIG["STRATEGY_NAME"],
             "embedding_model": EXP_CONFIG["EMBEDDING_MODEL"],
             "parameters": {
@@ -56,7 +56,7 @@ def main():
             "total_questions": len(recalls if 'recalls' in locals() else gt_map)
         },
         "summary_metrics": metrics,
-        "raw_retrieval_data": pred_data # 完整保留當初檢索產生的原始結果
+        "detailed_retrieval_results": pred_data # 完整保留當初檢索產生的原始結果
     }
 
     # 6. 儲存 JSON

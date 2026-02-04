@@ -10,28 +10,62 @@
         .container { max-width: 1000px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         h1 { text-align: center; color: #333; }
         .chart-wrapper { position: relative; margin-bottom: 40px; height: 450px; }
+        .question-wrapper { position: relative; margin-bottom: 40px; }
         .controls { text-align: center; margin-bottom: 20px; }
+        input { padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
         select { padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        tr:nth-child(odd) {
+            background-color: #ffffff;
+        }
     </style>
 </head>
 <body>
-
 <div class="container">
     <h1>RAG 檢索策略指標對比</h1>
     
     <div class="controls">
-        <label for="metricSelect">選擇觀測指標：</label>
+        <label for="keyword">關鍵字篩選：</label>
+        <input id="keyword">
+
+        <label for="metricSelect" style="margin-left: 16px;">選擇觀測指標：</label>
         <select id="metricSelect">
             <option value="Hit Rate">Hit Rate</option>
-            <option value="MRR">MRR</option>
             <option value="Mean Recall">Mean Recall</option>
             <option value="Mean Precision">Mean Precision</option>
             <option value="MAP">MAP</option>
+            <option value="MRR">MRR</option>
         </select>
     </div>
 
     <div class="chart-wrapper">
         <canvas id="experimentChart"></canvas>
+    </div>
+</div>
+
+<div class="container" style="margin-top: 16px;">
+    <h1>題目與檢索文件</h1>
+    
+    <div class="controls">
+        <label for="questionSelect">題目：</label>
+        <select id="questionSelect">
+        </select>
+    </div>
+
+    <div class="question-wrapper">
+        <table id="experimentData">
+            <thead>
+                <tr>
+                    <th>策略名稱</th>
+                    <th>檢索文檔編號</th>
+                </tr>
+            </thead>
+            <tbody>
+                
+            </tbody>
+        </table>
     </div>
 </div>
 
@@ -45,23 +79,26 @@
             // 注意：請確保此 HTML 與 ./output/ 資料夾的相對位置正確
             const response = await fetch('./output/final_experiment_comparison.json');
             rawData = await response.json();
-            renderChart('Hit Rate'); // 預設顯示 Hit Rate
+            setChartConditions('Hit Rate', ''); // 預設顯示 Hit Rate
         } catch (error) {
             console.error("無法讀取 JSON 資料，請檢查路徑或 CORS 限制:", error);
             alert("無法讀取資料。如果是本地直接打開，請使用 Live Server 或將 JSON 內嵌至 script 中。");
         }
     }
 
-    function renderChart(selectedMetric) {
+    function renderChart(selectedMetric, keyword) {
         const ctx = document.getElementById('experimentChart').getContext('2d');
         
         // 1. 取得所有的 K 值 (X 軸)
         const kLabels = [...new Set(rawData.map(d => d.K))].sort((a, b) => a - b);
         
         // 2. 根據 Strategy 分組
-        const strategies = [...new Set(rawData.map(d => d.Strategy))];
+        const strategies = [...new Set(rawData.map(d => d.Strategy))].sort((a,b) => {
+            const strategyA = a;
+            const strategyB = b;
+            return strategyA.localeCompare(strategyB);
+        }).filter(s => s.indexOf(keyword) != -1)
         
-
         const datasets = strategies.map((strategy, index) => {
             const strategyData = rawData.filter(d => d.Strategy === strategy);
             return {
@@ -110,10 +147,85 @@
 
     // 監聽下拉選單切換
     document.getElementById('metricSelect').addEventListener('change', (e) => {
-        renderChart(e.target.value);
+        setChartConditions(e.target.value, chartConditions.keyword);
     });
 
     loadData();
+</script>
+
+<script>
+
+    let reportData = [];
+
+    async function loadReportData() {
+        const files = [];
+        for(var i=0;i<13;i++) {
+            files.push(`./output/evaluation_full_report_4-${i}.json`);
+        }
+
+        await Promise.all(
+            files.map(async f => {
+                const response = await fetch(f);
+                reportData.push(await response.json());
+            })
+        );
+
+        reportData = reportData.sort((a, b)=>{
+            const strategyA = a.experiment_metadata.strategy;
+            const strategyB = b.experiment_metadata.strategy;
+            return strategyA.localeCompare(strategyB);
+        });
+
+        renderQuestionOptions();
+    }
+
+    function renderQuestionOptions() {
+        const options = [];
+        const questionList = reportData[0].detailed_retrieval_results;
+
+        for(var i=0;i<questionList.length;i++) {
+            options.push(`<option value="${questionList[i].question_id}">${questionList[i].question}</option>`);
+        }
+
+        document.getElementById("questionSelect").innerHTML = options.join('');
+        showRetrievedData(questionList[0].question_id);
+    }
+
+    function showRetrievedData(questionId) {
+        let tbody = document.getElementById("experimentData").getElementsByTagName("tbody")[0];
+
+        const rowData = [];
+        for(var i=0;i<reportData.length;i++) {
+            let strategy = reportData[i].experiment_metadata.strategy
+            let questionRawData = reportData[i].detailed_retrieval_results.filter(e => e.question_id == questionId)[0];
+            let retrievedDocList = questionRawData.retrieved_candidates.map(e => `${e.doc_id}_${e.file_name}`);
+            rowData.push(`<tr>
+                <td>${strategy}</td>
+                <td>${retrievedDocList.join('<br/>')}</td>
+            </tr>`);
+        }
+        tbody.innerHTML = rowData.join('');
+    }
+
+    // 監聽下拉選單切換
+    document.getElementById('questionSelect').addEventListener('change', (e) => {
+        showRetrievedData(e.target.value);
+    });
+
+    loadReportData();
+</script>
+
+<script>
+    let chartConditions = {keyword: '', selectedMetric: 'Hit Rate'};
+    function setChartConditions(selectedMetric, keyword) {
+        chartConditions.selectedMetric = selectedMetric;
+        chartConditions.keyword = keyword;
+        renderChart(selectedMetric, keyword);
+    }
+
+    document.getElementById('keyword').addEventListener('input', (e) => {
+        setChartConditions(chartConditions.selectedMetric, e.target.value)
+    });
 </script>
 
 </body>
