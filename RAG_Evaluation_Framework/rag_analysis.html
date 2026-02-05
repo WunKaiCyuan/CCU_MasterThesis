@@ -79,7 +79,7 @@
             // 注意：請確保此 HTML 與 ./output/ 資料夾的相對位置正確
             const response = await fetch('./output/final_experiment_comparison.json');
             rawData = await response.json();
-            setChartConditions('Hit Rate', ''); // 預設顯示 Hit Rate
+            setChartConditions('Hit Rate', '', chartConditions.question); // 預設顯示 Hit Rate
         } catch (error) {
             console.error("無法讀取 JSON 資料，請檢查路徑或 CORS 限制:", error);
             alert("無法讀取資料。如果是本地直接打開，請使用 Live Server 或將 JSON 內嵌至 script 中。");
@@ -147,7 +147,7 @@
 
     // 監聽下拉選單切換
     document.getElementById('metricSelect').addEventListener('change', (e) => {
-        setChartConditions(e.target.value, chartConditions.keyword);
+        setChartConditions(e.target.value, chartConditions.keyword, chartConditions.question);
     });
 
     loadData();
@@ -196,7 +196,8 @@
 
         const rowData = [];
         for(var i=0;i<reportData.length;i++) {
-            let strategy = reportData[i].experiment_metadata.strategy
+            let strategy = reportData[i].experiment_metadata.strategy;
+            if(strategy.indexOf(chartConditions.keyword) == -1) continue;
             let questionRawData = reportData[i].detailed_retrieval_results.filter(e => e.question_id == questionId)[0];
             let retrievedDocList = questionRawData.retrieved_candidates.map(e => `${e.doc_id}_${e.file_name}`);
             rowData.push(`<tr>
@@ -209,22 +210,23 @@
 
     // 監聽下拉選單切換
     document.getElementById('questionSelect').addEventListener('change', (e) => {
-        showRetrievedData(e.target.value);
+        setChartConditions(chartConditions.selectedMetric, chartConditions.keyword, e.target.value);
     });
 
     loadReportData();
 </script>
 
 <script>
-    let chartConditions = {keyword: '', selectedMetric: 'Hit Rate'};
-    function setChartConditions(selectedMetric, keyword) {
+    let chartConditions = {keyword: '', selectedMetric: 'Hit Rate', question: '1'};
+    function setChartConditions(selectedMetric, keyword, question) {
         chartConditions.selectedMetric = selectedMetric;
         chartConditions.keyword = keyword;
         renderChart(selectedMetric, keyword);
+        showRetrievedData(question);
     }
 
     document.getElementById('keyword').addEventListener('input', (e) => {
-        setChartConditions(chartConditions.selectedMetric, e.target.value)
+        setChartConditions(chartConditions.selectedMetric, e.target.value, chartConditions.question)
     });
 </script>
 
